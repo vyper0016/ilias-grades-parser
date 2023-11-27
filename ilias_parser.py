@@ -2,7 +2,6 @@ from configparser import ConfigParser
 import codecs
 import mechanicalsoup as ms
 from bs4 import BeautifulSoup
-from shortuuid import uuid
 import json
 
 config = ConfigParser()
@@ -110,5 +109,6 @@ def parse_sub_links(course_soup):
         sub_links.append(item)
     return sub_links
         
-b = login()
-parse_courses(b)
+if __name__ == "__main__":
+    b = login()
+    parse_courses(b)
