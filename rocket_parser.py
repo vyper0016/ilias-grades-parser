@@ -32,7 +32,7 @@ def fetch_user(user:str):
 
     return response
 
-def send_directory_request(count=100, offset=0):
+def send_directory_request(count=10, offset=0):
     url = "https://rocketchat.hhu.de/api/v1/directory"
     params = {
         "count": count,
@@ -66,7 +66,7 @@ def fetch_directory(start_offset):
 def get_total():
     return send_directory_request(count=1).json()['total']
 
-def update_rocket_db(num_threads=15):
+def update_rocket_db(num_threads=20):
     t = get_total()
     print(f'Fetching {t} users with {num_threads} threads')
 
@@ -110,4 +110,4 @@ def get_user_by_name(name:str):
     return None  
 
 if __name__ == '__main__':
-    update_rocket_db()
+    print(get_name_by_username('thwit103'))
