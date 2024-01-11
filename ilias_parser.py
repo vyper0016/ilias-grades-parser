@@ -5,6 +5,11 @@ from bs4 import BeautifulSoup
 import json
 import rocket_parser as rp
 import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 class IliasParser:
     
@@ -146,10 +151,16 @@ class IliasParser:
     def update_assignment_grades(self, course_id):
         self.grades_db[str(course_id)] = self.fetch_assignment_grades(course_id)
         self.save_db()
+        
+    def update_sub_links(self, course_id):
+        self.browser.open(url_builder(self.courses_db[str(course_id)]['url']))
+        self.courses_db[str(course_id)]['sub_links'] = self.parse_sub_links(BeautifulSoup(str(self.browser.page), 'html.parser'))
+        self.save_db()
     
     def fetch_assignment_grades(self, course_id):
         course_id = str(course_id)
         if course_id == '1526617':    # Matinf 1
+            self.update_sub_links(course_id)
             for i in self.courses_db[course_id]['sub_links']:
                 if i['title'].startswith('Abgabe der'):
                     url = i['url']
@@ -186,12 +197,80 @@ class IliasParser:
                         
                         
                 out_list.append(d)
-        
             return out_list    
+        
         elif course_id == '1526496':  # Progra
-            soup = BeautifulSoup(requests.get('https://hsp.pages.cs.uni-duesseldorf.de//programmierung/website//html/points_overview.html').text, 'html.parser')
-                       
- 
+            
+            firefox_options = webdriver.FirefoxOptions()
+            firefox_options.add_argument("--headless")
+            
+            driver = webdriver.Firefox(options=firefox_options)
+            
+            driver.get('https://hsp.pages.cs.uni-duesseldorf.de//programmierung/website//html/points_overview.html')
+            driver.find_element(By.ID, 'github_token').send_keys(self.creds['github_token'])
+            driver.find_element(By.ID, 'github_name').send_keys(self.creds['github_user'])
+            driver.find_element(By.CSS_SELECTOR, 'button[onclick="fetchPoints()"]').click()
+            driver.implicitly_wait(0.3)
+            WebDriverWait(driver, 10).until(EC.text_to_be_present_in_element((By.ID, 'messagesystem'), '/'))
+            WebDriverWait(driver, 10).until(EC.text_to_be_present_in_element((By.ID, 'chess'), '/'))
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            driver.close()
+            sheets = soup.find_all('tr', class_='sheet')
+            grades = []
+            for s in sheets:
+                sheet_dic = {'title': s.find('td', class_='sheetname').text}
+                total = s.find('td', class_='total')
+                if total.text:
+                    sheet_dic['grade'] = int(total.text)
+                grades.append(sheet_dic)
+            return grades
+        
+        elif course_id == '1526715':  # Rechnerarchitektur            
+            self.update_sub_links(course_id)
+
+            urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Übungsblatt')]    
+            
+            out_list = []
+            
+            for url in urls:
+                self.browser.open(url)                
+                soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+                title = soup.find('a', id='il_mhead_t_focus')
+                d = {}
+                d['title'] = title.text
+                form_groups = soup.find_all('div', class_='form-group')
+                for f in form_groups:
+                    name = f.find('div', class_='il_InfoScreenProperty')
+                    if name is None:
+                        continue
+                    name = name.text
+                    if name != "Ende":
+                        continue
+                    val = f.find('div', class_='il_InfoScreenPropertyValue').text
+                    d['deadline'] = val.strip()
+                
+                for potential_url in soup.find_all('a'):
+                    try:
+                        if potential_url.text == 'Ergebnisse':
+                            d['url'] = potential_url['href']
+                            break
+                    except KeyError:
+                        continue
+                
+                self.browser.open(url_builder(d['url']))
+                soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+                tds = soup.find_all('td', class_='std')
+                try:
+                    td = tds[4].text.split(' von ')
+                except IndexError:
+                    continue
+                d['grade'] = float(td[0])
+                d['max_grade'] = float(td[1])
+                
+                        
+                out_list.append(d)
+            return out_list    
+
 def url_builder(href: str):
     return "https://ilias.hhu.de/" + href    
       
@@ -217,5 +296,5 @@ if __name__ == "__main__":
     github_token = codecs.decode(github_token, 'rot_13')
     github_user = config.get('GITHUB', 'user')
     b = IliasParser(user, password, new=False, other_creds = {"github_token": github_token, "github_user": github_user})
-    b.update_assignment_grades(1526496)
+    b.update_assignment_grades(1526715)
     
