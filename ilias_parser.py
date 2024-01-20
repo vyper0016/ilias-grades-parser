@@ -4,12 +4,13 @@ import mechanicalsoup as ms
 from bs4 import BeautifulSoup
 import json
 import rocket_parser as rp
-import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import threading
 
 class IliasParser:
     
@@ -264,6 +265,7 @@ class IliasParser:
                 
         t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max}
         t['zugelassen'], t['percentage_zulassung'] = self.zulassung(course_id, grades)
+        print("Done fetching grades for course", t['title'])
         return t
         
     def zulassung(self, course_id, grades):
@@ -325,7 +327,8 @@ class IliasParser:
         grades = []
         grades_sum = 0
         grades_max = 0
-        for url in urls:
+
+        def fetch_grade(url):
             url = url_builder(url)
             self.browser.open(url)                
             soup = BeautifulSoup(str(self.browser.page), 'html.parser')
@@ -359,20 +362,40 @@ class IliasParser:
                     tds = tr.find_all('td', class_='std')
             try:
                 td = tds[4].text.split(' von ')
-            except IndexError:
-                continue
+            except UnboundLocalError:
+                # No results yet / test not submitted
+                grades.append(d)
+                return
             d['grade'] = float(td[0])
             d['max_grade'] = float(td[1])
             
+            nonlocal grades_sum, grades_max
             grades_sum += d['grade']
             grades_max += d['max_grade']              
 
             grades.append(d)
+
+        threads = []
+        for url in urls:
+            thread = threading.Thread(target=fetch_grade, args=(url,))
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
+
         return grades, grades_sum, grades_max
         
     def update_all_grades(self):
+        threads = []
         for c in self.grades_db:
-            self.grades_db[c] = self.fetch_assignment_grades(c)
+            thread = threading.Thread(target=self.fetch_assignment_grades, args=(c,))
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
+
         self.save_db()
         
 def url_builder(href: str):
