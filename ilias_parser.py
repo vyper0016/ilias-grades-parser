@@ -28,8 +28,7 @@ class IliasParser:
                 self.members_db = json.load(f)
             with open('./data/grades.json', 'r') as f:
                 self.grades_db = json.load(f)
-        
-    
+          
     def login(self, user, password):
         browser = ms.StatefulBrowser()
 
@@ -159,6 +158,10 @@ class IliasParser:
     
     def fetch_assignment_grades(self, course_id):
         course_id = str(course_id)
+        print("Fetching grades for course", self.courses_db[course_id]['title'])
+        grades = []
+        grades_sum = 0
+        grades_max = 0
         if course_id == '1526617':    # Matinf 1
             self.update_sub_links(course_id)
             for i in self.courses_db[course_id]['sub_links']:
@@ -169,13 +172,12 @@ class IliasParser:
             self.browser.open(url)
             soup = BeautifulSoup(str(self.browser.page), 'html.parser')
             containers = soup.find_all('div', class_='il_VAccordionInnerContainer')
-            out_list = []
             for c in containers:
                 title = c.find('span', class_='ilAssignmentHeader')
                 if title is None:
                     continue
                 d = {}
-                d['title'] = title.text
+                d['title'] = title.text.replace(' (Verpflichtend)', '')
                 form_groups = c.find_all('div', class_='form-group')
                 for f in form_groups:
                     name = f.find('div', class_='il_InfoScreenProperty')
@@ -194,10 +196,14 @@ class IliasParser:
                         d['deadline'] = val.strip()
                     elif name == "Abgegebene Dateien":
                         d['submitted'] = "Sie haben noch keine Datei abgegeben." not in val
-                        
-                        
-                out_list.append(d)
-            return out_list    
+                
+                try:
+                    grades_sum += d['grade']                      
+                except KeyError:
+                    pass
+                d['max_grade'] = 20
+                grades.append(d)
+                grades_max += 20
         
         elif course_id == '1526496':  # Progra
             
@@ -216,62 +222,162 @@ class IliasParser:
             soup = BeautifulSoup(driver.page_source, 'html.parser')
             driver.close()
             sheets = soup.find_all('tr', class_='sheet')
-            grades = []
             for s in sheets:
-                sheet_dic = {'title': s.find('td', class_='sheetname').text}
+                
+                sheet_dic = {'title': s.find('td', class_='sheetname').text, 'max_grade': 0}
                 total = s.find('td', class_='total')
                 if total.text:
                     sheet_dic['grade'] = int(total.text)
+                    grades_sum += sheet_dic['grade']
+                
+                for b in s.find_all('td'):  
+                    a = b.find('a')
+                    if a is None:
+                        continue
+                    grades_max += int(a.text.split('/')[1])
+                    sheet_dic['max_grade'] += int(a.text.split('/')[1])
                 grades.append(sheet_dic)
-            return grades
         
         elif course_id == '1526715':  # Rechnerarchitektur            
             self.update_sub_links(course_id)
 
-            urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Übungsblatt')]    
-            
-            out_list = []
-            
-            for url in urls:
-                self.browser.open(url)                
-                soup = BeautifulSoup(str(self.browser.page), 'html.parser')
-                title = soup.find('a', id='il_mhead_t_focus')
-                d = {}
-                d['title'] = title.text
-                form_groups = soup.find_all('div', class_='form-group')
-                for f in form_groups:
-                    name = f.find('div', class_='il_InfoScreenProperty')
-                    if name is None:
-                        continue
-                    name = name.text
-                    if name != "Ende":
-                        continue
-                    val = f.find('div', class_='il_InfoScreenPropertyValue').text
-                    d['deadline'] = val.strip()
-                
-                for potential_url in soup.find_all('a'):
-                    try:
-                        if potential_url.text == 'Ergebnisse':
-                            d['url'] = potential_url['href']
-                            break
-                    except KeyError:
-                        continue
-                
-                self.browser.open(url_builder(d['url']))
-                soup = BeautifulSoup(str(self.browser.page), 'html.parser')
-                tds = soup.find_all('td', class_='std')
-                try:
-                    td = tds[4].text.split(' von ')
-                except IndexError:
-                    continue
-                d['grade'] = float(td[0])
-                d['max_grade'] = float(td[1])
-                
-                        
-                out_list.append(d)
-            return out_list    
+            urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Übungsblatt')]
+            grades, grades_sum, grades_max = self.grades_template1(urls)
 
+        elif course_id == '1526712': # WA
+            for i in self.courses_db[course_id]['sub_links']:
+                if i['title'].startswith('Übung'):
+                    url = i['url']
+                    break
+            self.browser.open(url)
+            soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+            hs = soup.find_all('h3', class_='il_ContainerItemTitle')
+            urls = []
+            for h in hs:
+                a = h.find('a')
+                if a is None:
+                    continue
+                if not a.text.startswith('Test'):
+                    continue
+                urls.append(a['href'])
+            grades, grades_sum, grades_max = self.grades_template1(urls)                
+                
+        t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max}
+        t['zugelassen'], t['percentage_zulassung'] = self.zulassung(course_id, grades)
+        return t
+        
+    def zulassung(self, course_id, grades):
+        if course_id == '1526715': # Rechnerarchitektur
+            return self.zulassung_helper_2parts(grades, (3, 9), (9, 15), 135, 135, 300)
+        
+        if course_id == '1526617': # Matinf 1
+            return self.zulassung_helper(grades, (1, 14), sum_min=130)
+        
+        if course_id == '1526496': # Progra
+            return self.zulassung_helper_2parts(grades, (3, 9), (9, 14), 60, 60, 140)
+        
+        if course_id == '1526712': # WA
+            return self.zulassung_helper(grades, (1, 11), percentage_min=0.5)
+        
+    def zulassung_helper_2parts(self, grades, sum1_tuple: tuple[2], sum2_tuple: tuple[2], sum1_min: float, sum2_min: float, sum_total_min: float):        
+        sum1 = 0
+        sum2 = 0
+        range1 = [str(i) for i in range(*sum1_tuple)]
+        range2 = [str(i) for i in range(*sum2_tuple)]
+        
+        for g in grades:
+            if 'grade' not in g:
+                continue
+            title = g['title'].split(' ')[-1]
+            
+            if title in range1:
+                sum1 += g['grade']
+            elif title in range2:
+                sum2 += g['grade']
+                
+        return sum1 >= sum1_min and sum2 >= sum2_min and (sum1 + sum2) >= sum_total_min, (sum1 + sum2) / sum_total_min
+    
+    def zulassung_helper(self, grades, sum_tuple: tuple[2], sum_min: float = None, percentage_min: float = None):
+        sum = 0
+        if sum_min is None:
+            assert percentage_min is not None, "Either sum_min or percentage_min must be specified"
+            assert 'max_grade' in grades[0], "Cannot calculate percentage without max_grade"
+            sum_max = 0
+        else:
+            assert percentage_min is None, "Either sum_min or percentage_min must be specified"
+                
+        for g in grades:
+            if g['title'].split(' ')[-1] in [str(i) for i in range(*sum_tuple)]:
+                try:
+                    sum += g['grade']
+                except KeyError:
+                    continue
+                
+                if percentage_min is not None:
+                    sum_max += g['max_grade']
+                
+        if percentage_min is not None:
+            return sum / sum_max >= percentage_min, (sum / sum_max)  / percentage_min
+              
+        return sum >= sum_min, sum/sum_min
+        
+    def grades_template1(self, urls):
+        grades = []
+        grades_sum = 0
+        grades_max = 0
+        for url in urls:
+            url = url_builder(url)
+            self.browser.open(url)                
+            soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+            title = soup.find('a', id='il_mhead_t_focus')
+            d = {}
+            d['title'] = title.text
+            form_groups = soup.find_all('div', class_='form-group')
+            for f in form_groups:
+                name = f.find('div', class_='il_InfoScreenProperty')
+                if name is None:
+                    continue
+                name = name.text
+                if name != "Ende":
+                    continue
+                val = f.find('div', class_='il_InfoScreenPropertyValue').text
+                d['deadline'] = val.strip()
+            
+            for potential_url in soup.find_all('a'):
+                try:
+                    if potential_url.text == 'Ergebnisse':
+                        d['url'] = potential_url['href']
+                        break
+                except KeyError:
+                    continue
+            
+            self.browser.open(url_builder(d['url']))
+            soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+            trs = soup.find_all('tr')
+            for tr in trs:
+                if tr.find('strong') is not None:                
+                    tds = tr.find_all('td', class_='std')
+            try:
+                td = tds[4].text.split(' von ')
+            except IndexError:
+                continue
+            d['grade'] = float(td[0])
+            d['max_grade'] = float(td[1])
+            
+            grades_sum += d['grade']
+            grades_max += d['max_grade']              
+
+            grades.append(d)
+        return grades, grades_sum, grades_max
+        
+    def update_all_grades(self):
+        for c in self.grades_db:
+            self.grades_db[c] = self.fetch_assignment_grades(c)
+        self.save_db()
+        
 def url_builder(href: str):
+    if href.startswith('http'):
+        return href
     return "https://ilias.hhu.de/" + href    
       
 def get_id_from_url(url: str):
@@ -296,5 +402,5 @@ if __name__ == "__main__":
     github_token = codecs.decode(github_token, 'rot_13')
     github_user = config.get('GITHUB', 'user')
     b = IliasParser(user, password, new=False, other_creds = {"github_token": github_token, "github_user": github_user})
-    b.update_assignment_grades(1526715)
+    b.update_all_grades()
     
