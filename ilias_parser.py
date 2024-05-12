@@ -107,7 +107,8 @@ class IliasParser:
             self.save_zulassung_excel()
     
     def save_zulassung_excel(self):
-               
+        pass
+    
     def parse_members(self, course_soup):
         browser = self.browser
         tab_members = course_soup.find('li', id='tab_members')
@@ -273,71 +274,7 @@ class IliasParser:
         print("Done fetching grades for course", t['title'])
         self.grades_db[course_id] = t
         return t
-        
-    def zulassung(self, course_id, grades):
-        supported_courses = {'1526617', '1526496', '1526715', '1526712'}
-        if course_id not in supported_courses:
-            #print(f"Course {self.courses_db[course_id]['title']} not supported for zulassung check")
-            return
-        if course_id == '1526715': # Rechnerarchitektur
-            return self.zulassung_helper_2parts(grades, (3, 9), (9, 15), 135, 135, 300)
-        
-        if course_id == '1526617': # Matinf 1
-            return self.zulassung_helper(grades, (1, 14), sum_min=130)
-        
-        if course_id == '1526496': # Progra
-            return self.zulassung_helper_2parts(grades, (3, 9), (9, 14), 60, 60, 140)
-        
-        if course_id == '1526712': # WA
-            return self.zulassung_helper(grades, (1, 12), percentage_min=0.5)
-        
-    def zulassung_helper_2parts(self, grades, sum1_tuple: tuple[2], sum2_tuple: tuple[2], sum1_min: float, sum2_min: float, sum_total_min: float):        
-        sum1 = 0
-        sum2 = 0
-        range1 = [str(i) for i in range(*sum1_tuple)]
-        range2 = [str(i) for i in range(*sum2_tuple)]
-        
-        for g in grades:
-            if 'grade' not in g:
-                print("No grade found for", g['title'], url_builder(g['url']) if 'url' in g else '')
-                continue
-            title = g['title'].split(' ')[-1]
             
-            if title in range1:
-                sum1 += g['grade']
-            elif title in range2:
-                sum2 += g['grade']
-                
-        return sum1 >= sum1_min and sum2 >= sum2_min and (sum1 + sum2) >= sum_total_min, (sum1 + sum2) / sum_total_min
-    
-    def zulassung_helper(self, grades, sum_tuple: tuple[2], sum_min: float = None, percentage_min: float = None):
-        sum = 0
-        if sum_min is None:
-            assert percentage_min is not None, "Either sum_min or percentage_min must be specified"
-            assert 'max_grade' in grades[0], "Cannot calculate percentage without max_grade"
-            sum_max = 0
-        else:
-            assert percentage_min is None, "Either sum_min or percentage_min must be specified"
-                
-        for g in grades:
-            if int(g['title'].split(' ')[-1]) in [i for i in range(*sum_tuple)]:
-                try:
-                    sum += g['grade']
-                except KeyError:
-                    pass              
-                
-            if percentage_min is not None:
-                if 'max_grade' not in g and 'grade' not in g:
-                    print("No grade found for", g['title'], url_builder(g['url']) if 'url' in g else '')
-                    continue
-                sum_max += g['max_grade']
-                
-                
-        if percentage_min is not None:
-            return sum / sum_max >= percentage_min, (sum / sum_max)  / percentage_min
-              
-        return sum >= sum_min, sum/sum_min
-        
     def grades_template1(self, urls):
         grades = []
         grades_sum = 0
