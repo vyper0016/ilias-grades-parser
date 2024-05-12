@@ -11,17 +11,19 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import threading
+from prettytable import PrettyTable
 
 class IliasParser:
     
-    def __init__(self, user, password, new=True, other_creds = {}):
+    def __init__(self, user, password, new=True, other_creds = {}, zulassung_excel=None):
         self.browser = self.login(user, password)
         self.creds = {'user': user, 'password': password, **other_creds}
+        self.supported_courses = {'1526617', '1526496', '1526715', '1526712', '1639737', '1639601', '1639723'}
         if not self.browser:
             return
         if new:
-            self.parse_courses()
             self.grades_db = {}
+            self.parse_courses()
         else:
             with open('./data/courses.json', 'r') as f:
                 self.courses_db = json.load(f)
@@ -57,7 +59,11 @@ class IliasParser:
             d = c.find('div', class_='il-item-title')
             if d is None:
                 continue
-            c_url = d.find('a').get('href')
+            try:
+                c_url = d.find('a').get('href')
+            except AttributeError:
+                print('could not find url for course', d.text)
+                continue
             c_id = get_id_from_url(c_url)
             if c_id in courses:
                 continue
@@ -65,15 +71,19 @@ class IliasParser:
                 'title': d.find('a').text,
                 'url': c_url,
             }
-            d = c.find('div', class_='il-item-description')
-            dotz = parse_dotzen(d.text)
+            d2 = c.find('div', class_='il-item-description')
+            if d2 is not None:
+                dotz = parse_dotzen(d2.text)
+            else:
+                dotz = None
+                print('could not find dotzent for course', d.text)
             if dotz is not None:
                 courses[c_id]['profs'] = dotz
             
             browser.open(url_builder(courses[c_id]['url']))
             c_soup = BeautifulSoup(str(browser.page), 'html.parser')
             
-            members = self.parse_members(browser, c_soup)
+            members = self.parse_members(c_soup)
             if members is not None:
                 member_db[c_id] = members
             
@@ -92,6 +102,11 @@ class IliasParser:
             
         with open('./data/grades.json', 'w') as f:
             json.dump(self.grades_db, f, indent=4) 
+            
+        if self.zulassung_excel:
+            self.save_zulassung_excel()
+    
+    def save_zulassung_excel(self):
                
     def parse_members(self, course_soup):
         browser = self.browser
@@ -159,6 +174,11 @@ class IliasParser:
     
     def fetch_assignment_grades(self, course_id):
         course_id = str(course_id)
+        
+        if course_id not in self.supported_courses:
+            print(f"Course {self.courses_db[course_id]['title']} not supported")
+            return
+        
         print("Fetching grades for course", self.courses_db[course_id]['title'])
         grades = []
         grades_sum = 0
@@ -169,42 +189,8 @@ class IliasParser:
                 if i['title'].startswith('Abgabe der'):
                     url = i['url']
                     break
-                
-            self.browser.open(url)
-            soup = BeautifulSoup(str(self.browser.page), 'html.parser')
-            containers = soup.find_all('div', class_='il_VAccordionInnerContainer')
-            for c in containers:
-                title = c.find('span', class_='ilAssignmentHeader')
-                if title is None:
-                    continue
-                d = {}
-                d['title'] = title.text.replace(' (Verpflichtend)', '')
-                form_groups = c.find_all('div', class_='form-group')
-                for f in form_groups:
-                    name = f.find('div', class_='il_InfoScreenProperty')
-                    if name is None:
-                        continue
-                    name = name.text
-                    if name not in {"Note", "Datum der letzten Abgabe", "Abgabetermin", "Abgegebene Dateien"}:
-                        continue
-                    val = f.find('div', class_='il_InfoScreenPropertyValue').text
-                    
-                    if name == "Note":
-                        d['grade'] = float(val)
-                    elif name == "Datum der letzten Abgabe":
-                        d['deadline'] = val.strip()
-                    elif name == "Abgabetermin":
-                        d['deadline'] = val.strip()
-                    elif name == "Abgegebene Dateien":
-                        d['submitted'] = "Sie haben noch keine Datei abgegeben." not in val
-                
-                try:
-                    grades_sum += d['grade']                      
-                except KeyError:
-                    pass
-                d['max_grade'] = 20
-                grades.append(d)
-                grades_max += 20
+            
+            grades, grades_sum, grades_max = self.grades_template2(url)         
         
         elif course_id == '1526496':  # Progra
             
@@ -262,13 +248,37 @@ class IliasParser:
                     continue
                 urls.append(a['href'])
             grades, grades_sum, grades_max = self.grades_template1(urls)                
-                
+        
+        elif course_id == '1639737': # Propra 1
+            self.update_sub_links(course_id)
+            
+            urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Test Woche')]
+            grades, grades_sum, grades_max = self.grades_template1(urls)
+            
+        elif course_id == '1639601': # Matinf 2
+            
+            grades, grades_sum, grades_max = self.grades_template2(max_grade=30, url='https://ilias.hhu.de/ilias.php?baseClass=ilExerciseHandlerGUI&ref_id=1671344&cmd=showOverview')
+            
+        elif course_id == '1639723': # DB
+            self.update_sub_links(course_id)
+            
+            urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Test')]
+            
+            grades, grades_sum, grades_max = self.grades_template1(urls)
+            
         t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max}
-        t['zugelassen'], t['percentage_zulassung'] = self.zulassung(course_id, grades)
+        z = self.zulassung(course_id, grades)
+        if z is not None:
+            t['zugelassen'], t['percentage_zulassung'] = z
         print("Done fetching grades for course", t['title'])
+        self.grades_db[course_id] = t
         return t
         
     def zulassung(self, course_id, grades):
+        supported_courses = {'1526617', '1526496', '1526715', '1526712'}
+        if course_id not in supported_courses:
+            #print(f"Course {self.courses_db[course_id]['title']} not supported for zulassung check")
+            return
         if course_id == '1526715': # Rechnerarchitektur
             return self.zulassung_helper_2parts(grades, (3, 9), (9, 15), 135, 135, 300)
         
@@ -279,7 +289,7 @@ class IliasParser:
             return self.zulassung_helper_2parts(grades, (3, 9), (9, 14), 60, 60, 140)
         
         if course_id == '1526712': # WA
-            return self.zulassung_helper(grades, (1, 11), percentage_min=0.5)
+            return self.zulassung_helper(grades, (1, 12), percentage_min=0.5)
         
     def zulassung_helper_2parts(self, grades, sum1_tuple: tuple[2], sum2_tuple: tuple[2], sum1_min: float, sum2_min: float, sum_total_min: float):        
         sum1 = 0
@@ -289,6 +299,7 @@ class IliasParser:
         
         for g in grades:
             if 'grade' not in g:
+                print("No grade found for", g['title'], url_builder(g['url']) if 'url' in g else '')
                 continue
             title = g['title'].split(' ')[-1]
             
@@ -309,14 +320,18 @@ class IliasParser:
             assert percentage_min is None, "Either sum_min or percentage_min must be specified"
                 
         for g in grades:
-            if g['title'].split(' ')[-1] in [str(i) for i in range(*sum_tuple)]:
+            if int(g['title'].split(' ')[-1]) in [i for i in range(*sum_tuple)]:
                 try:
                     sum += g['grade']
                 except KeyError:
-                    continue
+                    pass              
                 
-                if percentage_min is not None:
-                    sum_max += g['max_grade']
+            if percentage_min is not None:
+                if 'max_grade' not in g and 'grade' not in g:
+                    print("No grade found for", g['title'], url_builder(g['url']) if 'url' in g else '')
+                    continue
+                sum_max += g['max_grade']
+                
                 
         if percentage_min is not None:
             return sum / sum_max >= percentage_min, (sum / sum_max)  / percentage_min
@@ -385,9 +400,90 @@ class IliasParser:
             thread.join()
 
         return grades, grades_sum, grades_max
+     
+    def grades_template2(self, url, max_grade):
+        grades = []
+        grades_sum = 0
+        grades_max = 0
         
+        self.browser.open(url)
+        soup = BeautifulSoup(str(self.browser.page), 'html.parser')
+        containers = soup.find_all('div', class_='il_VAccordionInnerContainer')
+        for c in containers:
+            title = c.find('span', class_='ilAssignmentHeader')
+            if title is None:
+                continue
+            d = {}
+            d['title'] = title.text.replace(' (Verpflichtend)', '')
+            form_groups = c.find_all('div', class_='form-group')
+            for f in form_groups:
+                name = f.find('div', class_='il_InfoScreenProperty')
+                if name is None:
+                    continue
+                name = name.text
+                if name not in {"Note", "Beendet am", "Abgabetermin", "Abgegebene Dateien"}:
+                    continue
+                val = f.find('div', class_='il_InfoScreenPropertyValue').text
+                
+                if name == "Note":
+                    d['grade'] = float(val)
+                elif name == "Beendet am":
+                    d['deadline'] = val.strip()
+                elif name == "Abgabetermin":
+                    d['deadline'] = val.strip()
+                elif name == "Abgegebene Dateien":
+                    d['submitted'] = "Sie haben noch keine Datei abgegeben." not in val
+            
+            try:
+                grades_sum += d['grade']                      
+            except KeyError:
+                pass
+            d['max_grade'] = max_grade
+            grades.append(d)
+            grades_max += max_grade
+        return grades, grades_sum, grades_max
+    
     def update_all_grades(self):
         threads = []
+        if not self.grades_db:
+            print("No grades found in database")
+            print("Would you like to choose courses to fetch grades for? (y/n)")
+            while True:
+                choice = input()
+                if choice == 'y':
+                    courses = []
+                    courses_table = PrettyTable()
+                    courses_table.field_names = ['Index', 'Course ID', 'Course Title', 'Supported']
+
+                    for i, course_id in enumerate(self.courses_db):
+                        course = self.courses_db[course_id]
+                        supported = 'X' if course_id in self.supported_courses else ''
+                        courses_table.add_row([i+1, course_id, course['title'], supported])
+                        courses.append(course_id)
+                        
+                    print(courses_table)
+                    print("Enter the indeces of the courses you want to fetch grades for separated by commas")
+                    
+                    while True:
+                        try:
+                            choices = [int(i) for i in input().replace(' ', '').split(',')]
+                            if not choices or len(choices) > len(courses):
+                                print("Invalid input")
+                                continue
+                            break
+                        except ValueError:
+                            print("Invalid input")
+                    
+                    for choice in choices:
+                        self.grades_db[courses[choice-1]] = {}
+                    break
+                        
+                elif choice == 'n':
+                    return
+                
+                else:
+                    print("Invalid input")
+                    
         for c in self.grades_db:
             thread = threading.Thread(target=self.fetch_assignment_grades, args=(c,))
             thread.start()
@@ -412,18 +508,15 @@ def parse_dotzen(s: str):
         s = s.replace(',', '')
         return s.split(';')
   
-  
-  
+
+
 if __name__ == "__main__":
     config = ConfigParser()
     config.read('./data/config.ini')
-
     user = config.get('LOGIN', 'user')
     password = config.get('LOGIN', 'password') 
     password = codecs.decode(password, 'rot_13')
-    github_token = config.get('GITHUB', 'token')
-    github_token = codecs.decode(github_token, 'rot_13')
-    github_user = config.get('GITHUB', 'user')
-    b = IliasParser(user, password, new=False, other_creds = {"github_token": github_token, "github_user": github_user})
+    excel_path = config.get('EXCEL', 'path')
+    b = IliasParser(user, password, new=False, zulassung_excel=excel_path)
     b.update_all_grades()
     
