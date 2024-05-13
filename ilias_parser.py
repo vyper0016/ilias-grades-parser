@@ -471,7 +471,8 @@ class IliasParser:
                     print("Invalid input")
             
             for choice in choices:
-                self.grades_db[courses[choice-1]] = {}          
+                self.grades_db[courses[choice-1]] = {}     
+            return True     
                    
     def update_all_grades(self):
         threads = []

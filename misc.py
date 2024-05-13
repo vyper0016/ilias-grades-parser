@@ -78,6 +78,7 @@ def setup_config(config_path: str):
                     ws = wb.active
                     ws.title = 'todelete'
                     wb.save(file_path)
+                    print(f"Excel file saved at {file_path}")
                     break
                 except Exception as e:
                     print(f"Could not save the file {file_path}.", e)
