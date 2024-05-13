@@ -27,7 +27,10 @@ class IliasParser:
         self.browser = self.login(user, password)
         self.creds = {'user': user, 'password': password, **other_creds}
         self.supported_courses = {'1526617', '1526496', '1526715', '1526712', '1639737', '1639601', '1639723'}
-        self.zulassung_excel = config.get('EXCEL', 'path')
+        try :
+            self.zulassung_excel = config.get('EXCEL', 'path')
+        except NoSectionError:
+            self.zulassung_excel = None
         self.config = config
         if not self.browser:
             return
