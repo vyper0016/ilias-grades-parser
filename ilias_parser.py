@@ -33,6 +33,7 @@ class IliasParser:
             return
         if new:
             self.grades_db = {}
+            self.excel_db = {}
             self.parse_courses()
         else:
             try:
@@ -75,6 +76,7 @@ class IliasParser:
         print("Login failed")
     
     def parse_courses(self):
+        print("Parsing courses")
         browser = self.browser
         soup = BeautifulSoup(str(browser.page), 'html.parser')
         courses = {}
@@ -101,7 +103,7 @@ class IliasParser:
                 dotz = parse_dotzen(d2.text)
             else:
                 dotz = None
-                print('could not find dotzent for course', d.text)
+                print('could not find dozent for course', d.text)
             if dotz is not None:
                 courses[c_id]['profs'] = dotz
             
