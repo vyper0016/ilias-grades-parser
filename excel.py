@@ -53,6 +53,9 @@ def make_from_template(file_path, course_grades: dict, new_sheet_name: str):
     if new_sheet_name in wb_new.sheetnames:
         raise ValueError('Sheet name already exists in workbook')
     
+    if 'todelete' in wb_new.sheetnames:
+        del wb_new['todelete']
+    
     ws_tmp = wb_tmp[config['DEFAULTS']['sheet']]
     
     ws_tmp[config['CELLS']['title']] = course_grades['title']

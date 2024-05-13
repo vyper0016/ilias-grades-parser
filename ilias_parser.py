@@ -1,4 +1,4 @@
-from configparser import ConfigParser
+from configparser import ConfigParser, NoSectionError
 import codecs
 import mechanicalsoup as ms
 from bs4 import BeautifulSoup
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     config_path = './data/config.ini'
     try:
         b = IliasParser(config_path, new=False)
-    except FileNotFoundError:
+    except NoSectionError:
         os.makedirs('./data', exist_ok=True)
         setup_config(config_path)
         b = IliasParser(config_path, new=True)

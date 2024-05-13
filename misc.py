@@ -63,20 +63,37 @@ def setup_config(config_path: str):
     
     print("Would you like to setup excel settings to save grades into excel tables?")
     
-    if prompt_y_n():
+    if prompt_y_n('y/n'):
         root = tk.Tk()
         root.withdraw()
-
-        print("Select the excel file to save grades into")
-        file_path = filedialog.askopenfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the excel file to save grades into")
-        while True:
-            try:
-                wb = openpyxl.load_workbook(file_path)
-                break
-            except Exception as e:
-                print(f"Could not open the file {file_path}.", e)
-                print("Please try again.")
-                file_path = filedialog.askopenfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the excel file to save grades into")
+        choice = prompt_choices(choices=['s', 'n'], prompt='Would you like to\n\
+            s: select an existing excel file\n\
+            n: create a new excel file\n')
+        if choice == 'n':
+            print('Select a path to save the excel file')
+            file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the path to save the excel file")
+            while True:
+                try:
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = 'todelete'
+                    wb.save(file_path)
+                    break
+                except Exception as e:
+                    print(f"Could not save the file {file_path}.", e)
+                    print("Please try again.")
+                    file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the path to save the excel file")
+        else:            
+            print("Select the excel file to save grades into")
+            file_path = filedialog.askopenfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the excel file to save grades into")
+            while True:
+                try:
+                    wb = openpyxl.load_workbook(file_path)
+                    break
+                except Exception as e:
+                    print(f"Could not open the file {file_path}.", e)
+                    print("Please try again.")
+                    file_path = filedialog.askopenfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the excel file to save grades into")
 
         config['EXCEL'] = {'path': file_path, 'defaul_sheet_name_length': 20}
 
