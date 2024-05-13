@@ -15,7 +15,7 @@ just run `pip install -r requirements.txt` in the project directory
 
 ## Demo Images
 
-![excel_table_demo](img/2024-05-13-16-20-28.png | width=300)
+![excel_table_demo](img/2024-05-13-16-20-28.png)
 
 ### Disclaimer
 
