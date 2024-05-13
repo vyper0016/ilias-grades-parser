@@ -15,6 +15,7 @@ from prettytable import PrettyTable
 import excel
 from datetime import datetime
 from misc import *
+import os
 
 class IliasParser:
     
@@ -130,8 +131,7 @@ class IliasParser:
             
         with open('./data/excel.json', 'w') as f:
             json.dump(self.excel_db, f, indent=4)
-
-        
+       
     def prompt_excel(self, course_id):
         print('Could not find excel data for course', self.courses_db[course_id]['title'])
         choice = prompt_choices(choices=['t', 's'], prompt="would you like to:\n\
@@ -157,9 +157,7 @@ class IliasParser:
                 raise ValueError("Invalid choice")
                 
         self.save_db() 
-                
- 
-    
+                    
     def save_excel(self):
         for course_id in self.grades_db:
             if course_id not in self.excel_db:
@@ -170,9 +168,7 @@ class IliasParser:
             
             excel.save_to_excel(self.zulassung_excel, self.grades_db[course_id], self.excel_db[course_id])
             print("Excel table saved for course", self.courses_db[course_id]['title'])
-            
-            
-    
+                  
     def parse_members(self, course_soup):
         browser = self.browser
         tab_members = course_soup.find('li', id='tab_members')
@@ -481,8 +477,7 @@ class IliasParser:
             
             for choice in choices:
                 self.grades_db[courses[choice-1]] = {}          
-                
-    
+                   
     def update_all_grades(self):
         threads = []
         if not self.grades_db:
@@ -513,6 +508,7 @@ if __name__ == "__main__":
     try:
         b = IliasParser(config_path, new=False)
     except FileNotFoundError:
+        os.makedirs('./data', exist_ok=True)
         setup_config(config_path)
         b = IliasParser(config_path, new=True)
     b.update_all_grades()
