@@ -3,7 +3,6 @@ import codecs
 import mechanicalsoup as ms
 from bs4 import BeautifulSoup
 import json
-import rocket_parser as rp
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -189,14 +188,8 @@ class IliasParser:
             if name:
                 m_dict['name'] = name.text
                 out['members'].append(m_dict)
-                continue
+                continue    
             
-            name = rp.get_name_by_username(m_dict['username'])
-            if name:
-                m_dict['name'] = name
-                out['members'].append(m_dict)        
-        
-        out['total_named'] = len(out['members'])
         return out
       
     def parse_sub_links(self, course_soup):
