@@ -12,25 +12,49 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import threading
 from prettytable import PrettyTable
+import excel
+from datetime import datetime
+from misc import *
 
 class IliasParser:
     
-    def __init__(self, user, password, new=True, other_creds = {}, zulassung_excel=None):
+    def __init__(self, config_path, new=False, **other_creds):
+        config = ConfigParser()
+        config.read(config_path)
+        user = config.get('LOGIN', 'user')
+        password = config.get('LOGIN', 'password') 
+        password = codecs.decode(password, 'rot_13')
         self.browser = self.login(user, password)
         self.creds = {'user': user, 'password': password, **other_creds}
         self.supported_courses = {'1526617', '1526496', '1526715', '1526712', '1639737', '1639601', '1639723'}
+        self.zulassung_excel = config.get('EXCEL', 'path')
         if not self.browser:
             return
         if new:
             self.grades_db = {}
             self.parse_courses()
         else:
-            with open('./data/courses.json', 'r') as f:
-                self.courses_db = json.load(f)
-            with open('./data/members.json', 'r') as f:
-                self.members_db = json.load(f)
-            with open('./data/grades.json', 'r') as f:
-                self.grades_db = json.load(f)
+            try:
+                with open('./data/courses.json', 'r') as f:
+                    self.courses_db = json.load(f)
+            except FileNotFoundError:
+                self.courses_db = {}
+            try:
+                with open('./data/members.json', 'r') as f:
+                    self.members_db = json.load(f)
+            except FileNotFoundError:
+                self.members_db = {}
+            try:
+                with open('./data/grades.json', 'r') as f:
+                    self.grades_db = json.load(f)
+            except FileNotFoundError:
+                self.grades_db = {}
+            try:
+                with open('./data/excel.json', 'r') as f:
+                    self.excel_db = json.load(f)
+            except FileNotFoundError:
+                self.excel_db = {}
+            self.save_db()
           
     def login(self, user, password):
         browser = ms.StatefulBrowser()
@@ -103,11 +127,50 @@ class IliasParser:
         with open('./data/grades.json', 'w') as f:
             json.dump(self.grades_db, f, indent=4) 
             
-        if self.zulassung_excel:
-            self.save_zulassung_excel()
+        with open('./data/excel.json', 'w') as f:
+            json.dump(self.excel_db, f, indent=4)
+
+        
+    def prompt_excel(self, course_id):
+        print('Could not find excel data for course', self.courses_db[course_id]['title'])
+        choice = prompt_choices(choices=['t', 's'], prompt="would you like to:\n\
+            t: use a template to create a new excel table automatically\n\
+            s: skip this course and don't save it in the excel file")
+        
+        match choice:
+            case 's':
+                self.excel_db[course_id] = {'skip': True}
+            
+            case 't':
+                print("Creating new excel table for course", self.courses_db[course_id]['title'])
+                print("What would you like the sheet name for this course to be?")
+                default_name = self.courses_db[course_id]['title'][:int(config.get('EXCEL', 'defaul_sheet_name_length'))]
+                sheet_name = prompt_condition(lambda x: len(x) <= 31, "Enter a sheet name or hit Enter to use the default name: " + default_name)
+                sheet_name = sheet_name if sheet_name != '' else default_name
+                
+                self.excel_db[course_id] = {'sheet_name': sheet_name, 'skip': False}
+                self.excel_db[course_id]['cells'] = excel.make_from_template(self.zulassung_excel, self.grades_db[course_id], sheet_name)   
+                print("Excel table created for course", self.courses_db[course_id]['title'])
+                
+            case _:
+                raise ValueError("Invalid choice")
+                
+        self.save_db() 
+                
+ 
     
-    def save_zulassung_excel(self):
-        pass
+    def save_excel(self):
+        for course_id in self.grades_db:
+            if course_id not in self.excel_db:
+                self.prompt_excel(course_id)
+            
+            if self.excel_db[course_id]['skip']:
+                continue
+            
+            excel.save_to_excel(self.zulassung_excel, self.grades_db[course_id], self.excel_db[course_id])
+            print("Excel table saved for course", self.courses_db[course_id]['title'])
+            
+            
     
     def parse_members(self, course_soup):
         browser = self.browser
@@ -266,11 +329,18 @@ class IliasParser:
             urls = [i['url'] for i in self.courses_db[course_id]['sub_links'] if i['title'].startswith('Test')]
             
             grades, grades_sum, grades_max = self.grades_template1(urls)
-            
+        for g in grades:
+            g['index'] = int(g['title'].split(' ')[-1])
+            g['deadline'] = g['deadline'].replace('Heute', datetime.now().strftime('%d. %B %Y'))
+            g['submitted'] = 'grade' in g   # TODO: check on ilias if submitted
+        
+        grades = sorted(grades, key=lambda x: x['index'])
+        
+        for g in grades:
+            del g['index']
+        
         t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max}
-        z = self.zulassung(course_id, grades)
-        if z is not None:
-            t['zugelassen'], t['percentage_zulassung'] = z
+        
         print("Done fetching grades for course", t['title'])
         self.grades_db[course_id] = t
         return t
@@ -376,50 +446,47 @@ class IliasParser:
             except KeyError:
                 pass
             d['max_grade'] = max_grade
+            d['url'] = url
             grades.append(d)
             grades_max += max_grade
         return grades, grades_sum, grades_max
     
+    def prompt_course_selection(self):
+        print("No grades found in database")
+            
+        if prompt_y_n("Would you like to choose courses to fetch grades for? (y/n)"):
+            courses = []
+            courses_table = PrettyTable()
+            courses_table.field_names = ['Index', 'Course ID', 'Course Title', 'Supported']
+
+            for i, course_id in enumerate(self.courses_db):
+                course = self.courses_db[course_id]
+                supported = 'X' if course_id in self.supported_courses else ''
+                courses_table.add_row([i+1, course_id, course['title'], supported])
+                courses.append(course_id)
+                
+            print(courses_table)
+            print("Enter the indeces of the courses you want to fetch grades for separated by commas")
+            
+            while True:
+                try:
+                    choices = [int(i) for i in input().replace(' ', '').split(',')]
+                    if not choices or len(choices) > len(courses):
+                        print("Invalid input")
+                        continue
+                    break
+                except ValueError:
+                    print("Invalid input")
+            
+            for choice in choices:
+                self.grades_db[courses[choice-1]] = {}          
+                
+    
     def update_all_grades(self):
         threads = []
         if not self.grades_db:
-            print("No grades found in database")
-            print("Would you like to choose courses to fetch grades for? (y/n)")
-            while True:
-                choice = input()
-                if choice == 'y':
-                    courses = []
-                    courses_table = PrettyTable()
-                    courses_table.field_names = ['Index', 'Course ID', 'Course Title', 'Supported']
-
-                    for i, course_id in enumerate(self.courses_db):
-                        course = self.courses_db[course_id]
-                        supported = 'X' if course_id in self.supported_courses else ''
-                        courses_table.add_row([i+1, course_id, course['title'], supported])
-                        courses.append(course_id)
-                        
-                    print(courses_table)
-                    print("Enter the indeces of the courses you want to fetch grades for separated by commas")
-                    
-                    while True:
-                        try:
-                            choices = [int(i) for i in input().replace(' ', '').split(',')]
-                            if not choices or len(choices) > len(courses):
-                                print("Invalid input")
-                                continue
-                            break
-                        except ValueError:
-                            print("Invalid input")
-                    
-                    for choice in choices:
-                        self.grades_db[courses[choice-1]] = {}
-                    break
-                        
-                elif choice == 'n':
-                    return
-                
-                else:
-                    print("Invalid input")
+            if self.prompt_course_selection() is None:
+                return
                     
         for c in self.grades_db:
             thread = threading.Thread(target=self.fetch_assignment_grades, args=(c,))
@@ -431,29 +498,21 @@ class IliasParser:
 
         self.save_db()
         
-def url_builder(href: str):
-    if href.startswith('http'):
-        return href
-    return "https://ilias.hhu.de/" + href    
-      
-def get_id_from_url(url: str):
-    return url.split('ref_id=')[1].split('&')[0]        
+        if self.zulassung_excel:
+            self.save_excel()      
         
 def parse_dotzen(s: str):
     if 'Dozent(en):' in s:
         s = s.split('Dozent(en):')[1]
         s = s.replace(',', '')
         return s.split(';')
-  
-
 
 if __name__ == "__main__":
-    config = ConfigParser()
-    config.read('./data/config.ini')
-    user = config.get('LOGIN', 'user')
-    password = config.get('LOGIN', 'password') 
-    password = codecs.decode(password, 'rot_13')
-    excel_path = config.get('EXCEL', 'path')
-    b = IliasParser(user, password, new=False, zulassung_excel=excel_path)
+    config_path = './data/config.ini'
+    try:
+        b = IliasParser(config_path, new=False)
+    except FileNotFoundError:
+        setup_config(config_path)
+        b = IliasParser(config_path, new=True)
     b.update_all_grades()
     
