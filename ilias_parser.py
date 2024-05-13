@@ -28,6 +28,7 @@ class IliasParser:
         self.creds = {'user': user, 'password': password, **other_creds}
         self.supported_courses = {'1526617', '1526496', '1526715', '1526712', '1639737', '1639601', '1639723'}
         self.zulassung_excel = config.get('EXCEL', 'path')
+        self.config = config
         if not self.browser:
             return
         if new:
@@ -144,7 +145,7 @@ class IliasParser:
             case 't':
                 print("Creating new excel table for course", self.courses_db[course_id]['title'])
                 print("What would you like the sheet name for this course to be?")
-                default_name = self.courses_db[course_id]['title'][:int(config.get('EXCEL', 'defaul_sheet_name_length'))]
+                default_name = self.courses_db[course_id]['title'][:int(self.config.get('EXCEL', 'defaul_sheet_name_length'))]
                 sheet_name = prompt_condition(lambda x: len(x) <= 31, "Enter a sheet name or hit Enter to use the default name: " + default_name)
                 sheet_name = sheet_name if sheet_name != '' else default_name
                 
