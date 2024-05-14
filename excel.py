@@ -94,11 +94,11 @@ def save_to_excel(file_path, course_grades: dict, course_excel_dict: dict):
         for grade, cell in zip(course_grades['grades'], cell_range_to_list(course_excel_dict['cells'][attr])):
             if attr not in grade:
                 continue
+            if attr == 'submitted' and ws[cell].value is not None:
+                continue
             ws[cell] = grade[attr]
             if attr == 'title' and 'url' in grade and grade['url'] is not None:
                 ws[cell].hyperlink = url_builder(grade['url'])
-            if attr == 'submitted' and ws[cell].value is not None:
-                continue
     
     save_wb_retriable(wb, file_path)  
 
