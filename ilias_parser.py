@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 import threading
 from prettytable import PrettyTable
 import excel
-from datetime import datetime
+from datetime import datetime, timedelta
 from misc import *
 import os
 
@@ -325,7 +325,7 @@ class IliasParser:
             grades, grades_sum, grades_max = self.grades_template1(urls)
         for g in grades:
             g['index'] = int(g['title'].split(' ')[-1])
-            g['deadline'] = g['deadline'].replace('Heute', datetime.now().strftime('%d. %B %Y'))
+            g['deadline'] = g['deadline'].replace('Heute', datetime.now().strftime('%d. %B %Y')).replace('Gestern', (datetime.now() - timedelta(days=1)).strftime('%d. %B %Y'))
             g['submitted'] = 'grade' in g   # TODO: check on ilias if submitted
         
         grades = sorted(grades, key=lambda x: x['index'])
