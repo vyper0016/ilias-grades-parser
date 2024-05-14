@@ -173,7 +173,7 @@ class IliasParser:
             print("Excel table saved for course", self.courses_db[course_id]['title'])
         print("All excel tables saved")
         if prompt_y_n("Would you like to open the excel file? (y/n)"):
-            os.startfile(self.zulassjsong_excel)
+            os.startfile(self.zulassung_excel)
                   
     def parse_members(self, course_soup):
         browser = self.browser
