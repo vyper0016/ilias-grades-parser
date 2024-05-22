@@ -13,9 +13,12 @@ just run `pip install -r requirements.txt` in the project directory
 1. Run the script with `python ilias_grades_parser.py` or simply double click `run.bat`
 2. Follow the instructions in the console
 
-## Demo Images
+## Demo
 
-![excel_table_demo](img/2024-05-13-16-20-28.png)
+Demo Video:
+[![demo video](https://img.youtube.com/vi/SI2D3BBZYXI/maxresdefault.jpg)](https://youtu.be/SI2D3BBZYXI)
+
+![demo image](img/2024-05-13-16-20-28.png)
 
 ### Disclaimer
 
