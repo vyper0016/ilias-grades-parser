@@ -14,6 +14,7 @@ import excel
 from datetime import datetime, timedelta
 from misc import *
 import os
+from halo import Halo
 
 class IliasParser:
     
@@ -78,12 +79,13 @@ class IliasParser:
         print("Login failed")
     
     def parse_courses(self):
-        print("Parsing courses")
+        spinner = Halo(text='Parsing courses', spinner='bouncingBar')
         browser = self.browser
         soup = BeautifulSoup(str(browser.page), 'html.parser')
         courses = {}
         member_db = {}
         course_bodies = soup.find_all('div', class_='media-body')
+        spinner.start()
         for c in course_bodies:
             d = c.find('div', class_='il-item-title')
             if d is None:
@@ -91,7 +93,7 @@ class IliasParser:
             try:
                 c_url = d.find('a').get('href')
             except AttributeError:
-                print('could not find url for course', d.text)
+                print('\ncould not find url for course', d.text)
                 continue
             c_id = get_id_from_url(c_url)
             if c_id in courses:
@@ -105,7 +107,7 @@ class IliasParser:
                 dotz = parse_dotzen(d2.text)
             else:
                 dotz = None
-                print('could not find dozent for course', d.text)
+                print('\ncould not find dozent for course', d.text)
             if dotz is not None:
                 courses[c_id]['profs'] = dotz
             
@@ -118,6 +120,7 @@ class IliasParser:
             
             courses[c_id]['sub_links'] = self.parse_sub_links(c_soup)
 
+        spinner.succeed('Courses parsed')
         self.courses_db = courses        
         self.members_db = member_db
         self.save_db()
@@ -148,12 +151,15 @@ class IliasParser:
             case 't':
                 print("Creating new excel table for course", self.courses_db[course_id]['title'])
                 print("What would you like the sheet name for this course to be?")
-                default_name = self.courses_db[course_id]['title'][:int(self.config.get('EXCEL', 'defaul_sheet_name_length'))]
-                sheet_name = prompt_condition(lambda x: len(x) <= 31, "Enter a sheet name or hit Enter to use the default name: " + default_name)
+                default_name = self.courses_db[course_id]['title'].split(' ')[0] + ' ' + self.courses_db[course_id]['title'].split(' ')[1]
+                default_name = excel.validate_sheet_title(default_name)
+                    
+                sheet_name = prompt_condition(lambda x: len(x) <= 31 and excel.sheet_title_valid(x, verbose=True), "Enter a sheet name or hit Enter to use the default name: " + default_name)
                 sheet_name = sheet_name if sheet_name != '' else default_name
                 
                 self.excel_db[course_id] = {'sheet_name': sheet_name, 'skip': False}
-                self.excel_db[course_id]['cells'] = excel.make_from_template(self.zulassung_excel, self.grades_db[course_id], sheet_name)   
+                self.excel_db[course_id]['number_tests'] = int(prompt_condition(lambda x: x.isdigit() and 0 < int(x) < 100, "Enter the number of tests expected for this course: "))
+                self.excel_db[course_id] = excel.make_from_template(self.zulassung_excel, self.grades_db[course_id], self.excel_db[course_id])   
                 print("Excel table created for course", self.courses_db[course_id]['title'])
                 
             case _:

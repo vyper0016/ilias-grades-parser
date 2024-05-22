@@ -81,7 +81,7 @@ def setup_config(config_path: str):
                     print(f"Excel file saved at {file_path}")
                     break
                 except Exception as e:
-                    print(f"Could not save the file {file_path}.", e)
+                    print(f"Could not save the file ", e)
                     print("Please try again.")
                     file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Select the path to save the excel file")
         else:            
