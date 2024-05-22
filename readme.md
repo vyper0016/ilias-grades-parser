@@ -16,7 +16,11 @@ just run `pip install -r requirements.txt` in the project directory
 ## Demo
 
 Demo Video:
-[![demo video](https://img.youtube.com/vi/SI2D3BBZYXI/maxresdefault.jpg)](https://youtu.be/SI2D3BBZYXI)
+<iframe width="560" height="315"
+src="https://www.youtube.com/watch?v=SI2D3BBZYXI" 
+frameborder="0"
+allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" 
+allowfullscreen></iframe>
 
 ![demo image](img/2024-05-13-16-20-28.png)
 
