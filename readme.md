@@ -15,9 +15,7 @@ just run `pip install -r requirements.txt` in the project directory
 
 ## Demo
 
-Demo Video:
-
-![demo video](img/demo.mp4)
+https://github.com/vyper0016/ilias-grades-parser/assets/81050283/a3de0062-adbe-4735-8361-66bb897a0423
 
 ![demo image](img/2024-05-13-16-20-28.png)
 
