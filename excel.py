@@ -77,7 +77,8 @@ def template_sheet(wb: openpyxl.Workbook, new_sheet_name, course_title, number_t
         
     for cell in cell_range_to_list(f'F3:F{last_test_row}'):
         ws[cell].number_format = '0.0%'
-        ws[cell].value = f'=IF(E{cell[1]}<>0,D{cell[1]}/E{cell[1]},0)'
+        row = int(cell.split(':')[0][1:])
+        ws[cell].value = f'=IF(E{row}<>0,D{row}/E{row},0)'
     
     for i in [1, 2]:
         ws.merge_cells(f'A{last_test_row + i}:E{last_test_row + i}')
