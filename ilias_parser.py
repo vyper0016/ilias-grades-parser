@@ -345,7 +345,7 @@ class IliasParser:
         for g in grades:
             del g['index']
         
-        t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max}
+        t = {'title': self.courses_db[course_id]['title'] ,'grades': grades, 'percentage_total': grades_sum/grades_max if grades_max != 0 else 0}
         
         print("Done fetching grades for course", t['title'])
         self.grades_db[course_id] = t
@@ -362,7 +362,7 @@ class IliasParser:
             soup = BeautifulSoup(str(self.browser.page), 'html.parser')
             title = soup.find('a', id='il_mhead_t_focus')
             d = {}
-            d['title'] = title.text
+            d['title'] = title.text.replace(u'\xa0', u' ')
             form_groups = soup.find_all('div', class_='form-group')
             for f in form_groups:
                 name = f.find('div', class_='il_InfoScreenProperty')
