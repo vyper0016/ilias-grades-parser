@@ -118,6 +118,7 @@ def fetch_assignment_grades(parser, course_id):
             parser.update_sub_links(course_id)
             
             urls = [i['url'] for i in parser.courses_db[course_id]['sub_links'] if i['title'].startswith('Quiz ')]
+            urls = list(set(urls))
             grades, grades_sum, grades_max = grades_template1(parser, urls)
         
         case _:
@@ -125,7 +126,12 @@ def fetch_assignment_grades(parser, course_id):
             return
         
     for g in grades:
-        g['index'] = int(g['title'].split(' ')[-1])
+        for i in g['title'].split(' '):
+            i = i.strip("».[]&,:?-«;'")
+            if i.isdigit():
+                g['index'] = int(i)
+                break
+            
         g['deadline'] = g['deadline'].replace('Heute', datetime.now().strftime('%d. %B %Y'))\
         .replace('Gestern', (datetime.now() - timedelta(days=1)).strftime('%d. %B %Y'))\
         .replace('Morgen', (datetime.now() + timedelta(days=1)).strftime('%d. %B %Y'))
