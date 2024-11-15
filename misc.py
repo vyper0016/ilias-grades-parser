@@ -5,11 +5,7 @@ from getpass import getpass
 import tkinter as tk
 from tkinter import filedialog
 import openpyxl
-  
-def url_builder(href: str):
-    if href.startswith('http'):
-        return href
-    return "https://ilias.hhu.de/" + href    
+
       
 def get_id_from_url(url: str):
     return url.split('ref_id=')[1].split('&')[0]        
@@ -100,4 +96,9 @@ def setup_config(config_path: str):
 
     with open(config_path, 'w') as f:
         config.write(f)
+
+def url_builder(href: str):
+    if href.startswith('http'):
+        return href
+    return "https://ilias.hhu.de/" + href    
         
