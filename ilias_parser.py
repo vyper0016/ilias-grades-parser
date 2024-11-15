@@ -179,28 +179,7 @@ class IliasParser:
             os.startfile(self.zulassung_excel)
                   
     def parse_members(self, course_soup):
-        browser = self.browser
-        tab_members = course_soup.find('li', id='tab_members')
-        if tab_members is None:
-            return
-        url = tab_members.find('a').get('href')
-        browser.open(url_builder(url))
-        members_soup = BeautifulSoup(str(browser.page), 'html.parser')
-        members = members_soup.find('div', class_='il-deck')
-        members = members.find_all('div', class_='il-card')
-        out = {'total': len(members), 'members': []}
-        
-        for m in members:
-            m_dict = {'username': m.find('dl').find('dd').text}
-            
-            title = m.find('div', class_='card-title')
-            name = title.find('a')
-            if name:
-                m_dict['name'] = name.text
-                out['members'].append(m_dict)
-                continue    
-            
-        return out
+        return
       
     def parse_sub_links(self, course_soup):
         containers = course_soup.find_all('div', class_='ilContainerListItemOuter')
